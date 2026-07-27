@@ -62,6 +62,7 @@ on:
           - sync_transactions
           - audit_snapshots
           - train_f1
+          - analyze_gate
           - apply_migration
           - repair_orphan_events
       args:
@@ -127,6 +128,7 @@ jobs:
               sync_transactions)     python -m app.jobs.sync_transactions $INPUT_ARGS ;;
               audit_snapshots)       python -m app.jobs.audit_snapshots $INPUT_ARGS ;;
               train_f1)              pip install --quiet "./apps/api[ml]" && python -m app.jobs.train_f1 $INPUT_ARGS ;;
+              analyze_gate)          pip install --quiet "./apps/api[ml]" && python -m app.jobs.analyze_gate $INPUT_ARGS ;;
               apply_migration)       python -m app.jobs.apply_migration $INPUT_ARGS ;;
               repair_orphan_events)  python -m app.jobs.repair_orphan_events $INPUT_ARGS ;;
               *) echo "job desconocido: $INPUT_JOB" >&2; exit 1 ;;
