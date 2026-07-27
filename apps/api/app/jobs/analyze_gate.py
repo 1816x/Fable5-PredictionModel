@@ -43,6 +43,7 @@ from app.ml.dataset import (
     load_results_frame,
     load_transactions_frame,
 )
+from app.ml.market_anchor import sweep
 from app.ml.train import (
     MIN_GATE_N,
     PlattCalibrator,
@@ -263,6 +264,20 @@ def analyze(
     out["logistic_top_features"] = [
         {"feature": k, "coef": v} for k, v in ranked[:15]
     ]
+
+    # --- F. Market-anchored blend (the model): does nudging the line help? ---
+    # p = sigmoid(logit(mkt) + beta*(logit(model) - logit(mkt))). beta swept
+    # IN-SAMPLE on these same n games (no historical odds to fit it out-of-time)
+    # → an UPPER BOUND: if even the best beta can't beat beta=0 (the pure line),
+    # the model adds nothing. Three model inputs, incl. the ensemble mean.
+    ensemble = (logs + gbs) / 2.0
+    out["market_anchored"] = {
+        "logistic_scaled": sweep(logs, mkts, ys),
+        "hist_gb": sweep(gbs, mkts, ys),
+        "ensemble_mean": sweep(ensemble, mkts, ys),
+        "caveat": ("beta swept in-sample on the priced subset (no historical "
+                   "odds); an upper bound, not an out-of-sample operating point"),
+    }
     return out
 
 
@@ -297,6 +312,18 @@ def _markdown(r: dict[str, Any]) -> str:
                  f"(hit rate {d['deviation_hit_rate']})")
     L.append("\n**Features con más peso (logistic estandarizado):**")
     L.append(", ".join(f"{f['feature']}={f['coef']}" for f in r["logistic_top_features"]))
+    ma = r.get("market_anchored")
+    if ma:
+        L.append("\n**Modelo ancla-al-mercado (β-sweep, IN-SAMPLE):**")
+        L.append("| entrada | market_ll | β* | blend_ll | Δ vs mercado | bate |")
+        L.append("|---|---|---|---|---|---|")
+        for name in ("logistic_scaled", "hist_gb", "ensemble_mean"):
+            s = ma[name]
+            b = s["best"]
+            L.append(f"| {name} | {s['market_log_loss']} | {b['beta']} | "
+                     f"{b['log_loss']} | {b['delta_vs_market']} | "
+                     f"{'sí' if b['beats_market'] else 'NO'} |")
+        L.append(f"_{ma['caveat']}._")
     return "\n".join(L)
 
 
