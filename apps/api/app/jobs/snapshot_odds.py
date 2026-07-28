@@ -33,6 +33,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import httpx
 from sqlalchemy.engine import Engine
 
 from app.config import get_settings
@@ -46,7 +47,12 @@ def _with_f5(ev: OddsEvent, client: OddsClient, summary: dict[str, Any]) -> Odds
     """Merge the event's F5 outcomes (per-event endpoint) into ``ev``."""
     try:
         f5_event = parse_odds_event(client.get_event_odds(ev.source_id))
-    except OddsApiError as exc:
+    except (OddsApiError, httpx.HTTPError) as exc:
+        # A timeout/connection error on ONE per-event F5 call must never sink
+        # the whole run: the slate moneyline rows are already captured and the
+        # F5 line can't be re-fetched later, so we log and move on. httpx.HTTPError
+        # is the base of TimeoutException/ConnectError/etc. (non-2xx is already
+        # wrapped as OddsApiError by the client).
         summary["f5_errors"].append(f"{ev.source_id}: {exc}")
         return ev
     summary["f5_events_fetched"] += 1

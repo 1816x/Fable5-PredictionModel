@@ -167,6 +167,23 @@ def test_f5_failure_never_kills_the_moneyline_rows(db):
     assert len(summary["f5_errors"]) == 3
 
 
+def test_f5_timeout_never_kills_the_moneyline_rows(db):
+    # A raw httpx timeout on the per-event F5 call (NOT wrapped as
+    # OddsApiError) must be caught too — otherwise it sinks the whole run and
+    # the already-fetched slate moneyline rows are lost.
+    import httpx
+
+    class TimeoutF5Client(FakeOddsClient):
+        def get_event_odds(self, event_id, **kwargs):
+            raise httpx.TimeoutException("simulated read timeout")
+
+    summary = snapshot_odds.run(
+        client=TimeoutF5Client(), engine=db, captured_at=CAPTURE_TS
+    )
+    assert summary["snapshots_inserted"] == 8  # all moneyline rows landed
+    assert len(summary["f5_errors"]) == 3
+
+
 def test_closing_flag_only_within_window_and_never_duplicated(db):
     late_capture = datetime(2026, 7, 8, 19, 50, tzinfo=timezone.utc)
     summary = snapshot_odds.run(
